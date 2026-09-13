@@ -33,7 +33,7 @@ cat >/tmp/xmrig-config.json <<EOF
 }
 EOF
 
-srb_pid=''
+gpu_pid=''
 xmrig_pid=''
 
 reset_gpu_clocks() {
@@ -44,19 +44,19 @@ reset_gpu_clocks() {
 cleanup() {
   local pid
   trap - EXIT INT TERM
-  for pid in "$srb_pid" "$xmrig_pid"; do
+  for pid in "$gpu_pid" "$xmrig_pid"; do
     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
       kill -INT "$pid" 2>/dev/null || true
     fi
   done
   for _ in 1 2 3 4 5 6; do
-    if { [[ -z "$srb_pid" ]] || ! kill -0 "$srb_pid" 2>/dev/null; } \
+    if { [[ -z "$gpu_pid" ]] || ! kill -0 "$gpu_pid" 2>/dev/null; } \
       && { [[ -z "$xmrig_pid" ]] || ! kill -0 "$xmrig_pid" 2>/dev/null; }; then
       break
     fi
     sleep 1
   done
-  for pid in "$srb_pid" "$xmrig_pid"; do
+  for pid in "$gpu_pid" "$xmrig_pid"; do
     if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
       kill -TERM "$pid" 2>/dev/null || true
     fi
@@ -67,34 +67,32 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-# SRBMiner's runtime integrity check rejects Vast's injected loader variables.
-env -u LD_PRELOAD -u LD_PRELOAD_ENV -u LD_LIBRARY_PATH SRBMiner-MULTI \
-  --disable-cpu \
-  --algorithm quantus \
-  --pool "$QTC_POOL" \
-  --wallet "$QTC_WALLET" \
-  --worker "$WORKER" \
-  --password x \
-  --tls false \
-  --gpu-id 0 \
-  --gpu-reset-oc \
-  --gpu-coffset0 250 \
-  --gpu-cclock0 1750 \
-  --gpu-mclock0 810 \
-  --oc-coffset-delayed &
-srb_pid=$!
+reset_gpu_clocks
+peakminer \
+  --coin quantus \
+  --url "$QTC_POOL" \
+  --user "${QTC_WALLET}.${WORKER}" \
+  --devices 0 \
+  --status-interval 10 \
+  --api-port 0 \
+  --no-tips \
+  --gpu-core0 250 \
+  --gpu-core-delay 30 \
+  --gpu-lcore0 1750 \
+  --gpu-lmem0 810 &
+gpu_pid=$!
 
 xmrig --config=/tmp/xmrig-config.json &
 xmrig_pid=$!
 
 set +e
-wait -n "$srb_pid" "$xmrig_pid"
+wait -n "$gpu_pid" "$xmrig_pid"
 first_exit=$?
 set -e
 
-if ! kill -0 "$srb_pid" 2>/dev/null; then
-  echo "[idle-mining] SRBMiner exited with code ${first_exit}" >&2
-  srb_pid=''
+if ! kill -0 "$gpu_pid" 2>/dev/null; then
+  echo "[idle-mining] PeakMiner exited with code ${first_exit}" >&2
+  gpu_pid=''
   reset_gpu_clocks
   echo "[idle-mining] GPU mining unavailable; keeping XMRig running" >&2
   set +e
