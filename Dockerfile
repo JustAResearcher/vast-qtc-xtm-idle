@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.8.1-base-ubuntu22.04
+FROM nvidia/cuda:12.8.1-runtime-ubuntu22.04
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG SRB_VERSION=3.6.6
@@ -8,7 +8,7 @@ ARG XMRIG_VERSION=6.26.0
 ARG XMRIG_SHA256=fc6f8ae5f64e4f17481f7e3be29a1c56949f216a998414188003eae1db20c9e5
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && apt-get install -y --no-install-recommends ca-certificates curl tini \
     && rm -rf /var/lib/apt/lists/* \
     && curl -fsSL -o /tmp/srbminer.tar.gz \
       "https://github.com/doktor83/SRBMiner-Multi/releases/download/${SRB_VERSION}/SRBMiner-Multi-${SRB_VERSION_SLUG}-Linux.tar.gz" \
@@ -31,4 +31,4 @@ RUN chmod 0755 /usr/local/bin/idle-mining
 LABEL org.opencontainers.image.source="https://github.com/JustAResearcher/vast-qtc-xtm-idle"
 LABEL org.opencontainers.image.description="Vast background job for QTC GPU and XTM CPU idle mining"
 
-ENTRYPOINT ["/usr/local/bin/idle-mining"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/idle-mining"]

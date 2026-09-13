@@ -63,12 +63,7 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-env -i \
-  HOME=/tmp \
-  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-  TERM=xterm-256color \
-  SRBMiner-MULTI \
-  --background \
+SRBMiner-MULTI \
   --disable-cpu \
   --algorithm quantus \
   --pool "$QTC_POOL" \
