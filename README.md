@@ -1,14 +1,14 @@
-# Vast QTC + XTM idle job
+# Vast Pearl + XTM idle job
 
 This image runs two owner workloads inside one Vast.ai background job:
 
-- SRBMiner-MULTI 3.6.6 on GPU 0 for Quantus (QTC).
+- SRBMiner-MULTI 3.6.6 on GPU 0 for PearlHash (Pearl + Nock payout login).
 - XMRig 6.26.0 on CPU threads 0-14 for Tari (XTM).
 
 The entrypoint expects three positional arguments:
 
 ```text
-QTC_WALLET XTM_WALLET WORKER_NAME
+PEARL_NOCK_LOGIN XTM_WALLET WORKER_NAME
 ```
 
 It handles `SIGTERM`/`SIGINT`, stops both miners, and resets NVIDIA core and
