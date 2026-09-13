@@ -36,6 +36,11 @@ EOF
 srb_pid=''
 xmrig_pid=''
 
+reset_gpu_clocks() {
+  nvidia-smi -i 0 --reset-gpu-clocks >/dev/null 2>&1 || true
+  nvidia-smi -i 0 --reset-memory-clocks >/dev/null 2>&1 || true
+}
+
 cleanup() {
   local pid
   trap - EXIT INT TERM
@@ -57,8 +62,7 @@ cleanup() {
     fi
   done
   wait 2>/dev/null || true
-  nvidia-smi -i 0 --reset-gpu-clocks >/dev/null 2>&1 || true
-  nvidia-smi -i 0 --reset-memory-clocks >/dev/null 2>&1 || true
+  reset_gpu_clocks
 }
 
 trap cleanup EXIT INT TERM
@@ -90,11 +94,18 @@ set -e
 
 if ! kill -0 "$srb_pid" 2>/dev/null; then
   echo "[idle-mining] SRBMiner exited with code ${first_exit}" >&2
+  srb_pid=''
+  reset_gpu_clocks
+  echo "[idle-mining] GPU mining unavailable; keeping XMRig running" >&2
+  set +e
+  wait "$xmrig_pid"
+  xmrig_exit=$?
+  set -e
+  echo "[idle-mining] XMRig exited with code ${xmrig_exit}" >&2
+  exit "$xmrig_exit"
 fi
 if ! kill -0 "$xmrig_pid" 2>/dev/null; then
   echo "[idle-mining] XMRig exited with code ${first_exit}" >&2
 fi
 
-# Keep the container alive briefly so Vast can retain the first-failure logs.
-sleep 15
 exit "$first_exit"
