@@ -35,21 +35,8 @@ if [[ "$gpu_name" != *"RTX 2080 Ti"* ]]; then
 fi
 
 if [[ -n "$MEMORY_LOCK_MHZ" ]]; then
-  supported_clocks=$(nvidia-smi -i 0 --query-supported-clocks=memory,graphics --format=csv,noheader 2>/dev/null) || {
-    echo "The driver could not report supported clock pairs; existing settings were not changed." >&2
-    exit 1
-  }
-  if ! awk -F, -v wanted="$MEMORY_LOCK_MHZ" '
-      {
-        memory = $1
-        gsub(/[^0-9.]/, "", memory)
-        if (memory + 0 == wanted + 0) found = 1
-      }
-      END { exit(found ? 0 : 1) }
-    ' <<<"$supported_clocks"; then
-    echo "Memory lock ${MEMORY_LOCK_MHZ} MHz is not supported by this RTX 2080 Ti; existing settings were not changed." >&2
-    exit 1
-  fi
+  echo "Locked memory clocks are not supported by this RTX 2080 Ti; existing settings were not changed." >&2
+  exit 1
 fi
 
 install -d -m 0755 /usr/local/sbin
