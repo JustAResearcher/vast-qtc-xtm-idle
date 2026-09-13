@@ -2,7 +2,7 @@
 
 This image runs two owner workloads inside one Vast.ai background job:
 
-- SRBMiner-MULTI 3.6.4 on GPU 0 for Quantus (QTC), pinned because 3.6.6 rejects Vast's container runtime during startup.
+- SRBMiner-MULTI 3.6.6 on GPU 0 for Quantus (QTC).
 - XMRig 6.26.0 on CPU threads 0-14 for Tari (XTM).
 
 The entrypoint expects three positional arguments:
