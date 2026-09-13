@@ -11,9 +11,10 @@ The entrypoint expects three positional arguments:
 QTC_WALLET XTM_WALLET WORKER_NAME
 ```
 
-It handles `SIGTERM`/`SIGINT` and stops both miners without changing GPU clocks.
-Vast background jobs provide the rental-aware pause/resume lifecycle; the image
-does not poll for renters.
+SRBMiner requests a 2750 MHz fixed core clock and an 810 MHz fixed memory clock.
+It handles `SIGTERM`/`SIGINT`, stops both miners, and resets both locks when the
+idle job exits. Vast background jobs provide the rental-aware pause/resume
+lifecycle; the image does not poll for renters.
 
 Both upstream archives are downloaded during the build and verified against
 pinned SHA-256 checksums. Wallets are supplied only at runtime and are not

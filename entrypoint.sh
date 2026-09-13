@@ -36,6 +36,11 @@ EOF
 gpu_pid=''
 xmrig_pid=''
 
+reset_gpu_clocks() {
+  nvidia-smi -i 0 --reset-gpu-clocks >/dev/null 2>&1 || true
+  nvidia-smi -i 0 --reset-memory-clocks >/dev/null 2>&1 || true
+}
+
 cleanup() {
   local pid
   trap - EXIT INT TERM
@@ -57,6 +62,7 @@ cleanup() {
     fi
   done
   wait 2>/dev/null || true
+  reset_gpu_clocks
 }
 
 trap cleanup EXIT INT TERM
@@ -70,7 +76,11 @@ env -u LD_PRELOAD -u LD_PRELOAD_ENV -u LD_LIBRARY_PATH /tmp/srbminer_custom_bin 
   --wallet "$QTC_WALLET" \
   --worker "$WORKER" \
   --password x \
-  --gpu-id 0 &
+  --gpu-id 0 \
+  --gpu-reset-oc \
+  --gpu-cclock0 2750 \
+  --gpu-mclock0 810 \
+  --oc-coffset-delayed &
 gpu_pid=$!
 
 xmrig --config=/tmp/xmrig-config.json &
@@ -84,6 +94,7 @@ set -e
 if ! kill -0 "$gpu_pid" 2>/dev/null; then
   echo "[idle-mining] SRBMiner exited with code ${first_exit}" >&2
   gpu_pid=''
+  reset_gpu_clocks
   echo "[idle-mining] GPU mining unavailable; keeping XMRig running" >&2
   set +e
   wait "$xmrig_pid"
