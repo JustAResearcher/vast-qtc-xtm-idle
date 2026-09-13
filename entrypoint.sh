@@ -63,7 +63,7 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-SRBMiner-MULTI \
+stdbuf -oL -eL SRBMiner-MULTI \
   --disable-cpu \
   --algorithm quantus \
   --pool "$QTC_POOL" \
@@ -82,4 +82,18 @@ srb_pid=$!
 xmrig --config=/tmp/xmrig-config.json &
 xmrig_pid=$!
 
+set +e
 wait -n "$srb_pid" "$xmrig_pid"
+first_exit=$?
+set -e
+
+if ! kill -0 "$srb_pid" 2>/dev/null; then
+  echo "[idle-mining] SRBMiner exited with code ${first_exit}" >&2
+fi
+if ! kill -0 "$xmrig_pid" 2>/dev/null; then
+  echo "[idle-mining] XMRig exited with code ${first_exit}" >&2
+fi
+
+# Keep the container alive briefly so Vast can retain the first-failure logs.
+sleep 15
+exit "$first_exit"
