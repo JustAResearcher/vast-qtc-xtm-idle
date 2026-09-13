@@ -63,7 +63,7 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-env -u LD_PRELOAD -u LD_PRELOAD_ENV -u LD_LIBRARY_PATH SRBMiner-MULTI \
+srb_command=(env -u LD_PRELOAD -u LD_PRELOAD_ENV SRBMiner-MULTI \
   --disable-cpu \
   --algorithm quantus \
   --pool "$QTC_POOL" \
@@ -76,7 +76,9 @@ env -u LD_PRELOAD -u LD_PRELOAD_ENV -u LD_LIBRARY_PATH SRBMiner-MULTI \
   --gpu-coffset0 250 \
   --gpu-cclock0 1750 \
   --gpu-mclock0 810 \
-  --oc-coffset-delayed &
+  --oc-coffset-delayed)
+printf -v srb_shell '%q ' "${srb_command[@]}"
+script --quiet --return --flush --command "$srb_shell" /dev/null &
 srb_pid=$!
 
 xmrig --config=/tmp/xmrig-config.json &
