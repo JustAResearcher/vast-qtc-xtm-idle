@@ -6,6 +6,7 @@ SERVICE=/etc/systemd/system/vast-qtc-clock-controller.service
 CONFIG=/etc/default/vast-qtc-clock-controller
 CORE_LOCK_MHZ=${CORE_LOCK_MHZ:-1750}
 MEMORY_LOCK_MHZ=${MEMORY_LOCK_MHZ:-}
+POWER_LIMIT_W=${POWER_LIMIT_W:-}
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   echo "Run this installer from the physical Ubuntu host's root shell." >&2
@@ -27,6 +28,10 @@ if [[ -n "$MEMORY_LOCK_MHZ" && ! "$MEMORY_LOCK_MHZ" =~ ^[0-9]+$ ]]; then
   echo "MEMORY_LOCK_MHZ must be empty or a positive integer." >&2
   exit 1
 fi
+if [[ -n "$POWER_LIMIT_W" && ! "$POWER_LIMIT_W" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  echo "POWER_LIMIT_W must be empty or a positive number." >&2
+  exit 1
+fi
 
 gpu_name=$(nvidia-smi -i 0 --query-gpu=name --format=csv,noheader | head -n 1)
 if [[ "$gpu_name" != *"RTX 2080 Ti"* ]]; then
@@ -39,11 +44,19 @@ if [[ -n "$MEMORY_LOCK_MHZ" ]]; then
   exit 1
 fi
 
+DEFAULT_POWER_LIMIT_W=$(nvidia-smi -i 0 --query-gpu=power.default_limit --format=csv,noheader,nounits | head -n 1 | tr -d ' ')
+if [[ ! "$DEFAULT_POWER_LIMIT_W" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+  echo "Could not read the RTX 2080 Ti default power limit; existing settings were not changed." >&2
+  exit 1
+fi
+
 install -d -m 0755 /usr/local/sbin
 
 {
   printf 'CORE_LOCK_MHZ=%s\n' "$CORE_LOCK_MHZ"
   printf 'MEMORY_LOCK_MHZ=%s\n' "$MEMORY_LOCK_MHZ"
+  printf 'POWER_LIMIT_W=%s\n' "$POWER_LIMIT_W"
+  printf 'DEFAULT_POWER_LIMIT_W=%s\n' "$DEFAULT_POWER_LIMIT_W"
 } >"$CONFIG"
 chmod 0644 "$CONFIG"
 
@@ -66,8 +79,9 @@ log() {
 reset_clocks() {
   nvidia-smi -i "$GPU_INDEX" --reset-gpu-clocks >/dev/null 2>&1 || true
   nvidia-smi -i "$GPU_INDEX" --reset-memory-clocks >/dev/null 2>&1 || true
+  nvidia-smi -i "$GPU_INDEX" --power-limit="$DEFAULT_POWER_LIMIT_W" >/dev/null 2>&1 || true
   if [[ "$STATE" != 'stock' ]]; then
-    log 'restored stock clocks'
+    log 'restored stock clocks and power limit'
   fi
   STATE='stock'
 }
@@ -76,6 +90,7 @@ apply_owner_clocks() {
   nvidia-smi -i "$GPU_INDEX" --persistence-mode=1 >/dev/null 2>&1 || true
   nvidia-smi -i "$GPU_INDEX" --reset-gpu-clocks >/dev/null 2>&1 || true
   nvidia-smi -i "$GPU_INDEX" --reset-memory-clocks >/dev/null 2>&1 || true
+  nvidia-smi -i "$GPU_INDEX" --power-limit="$DEFAULT_POWER_LIMIT_W" >/dev/null 2>&1 || true
 
   if ! nvidia-smi -i "$GPU_INDEX" --lock-gpu-clocks="$CORE_LOCK_MHZ,$CORE_LOCK_MHZ" >/dev/null 2>&1; then
     reset_clocks
@@ -92,12 +107,16 @@ apply_owner_clocks() {
     return
   fi
 
-  STATE='owner'
-  if [[ -n "$MEMORY_LOCK_MHZ" ]]; then
-    log "applied owner core lock ${CORE_LOCK_MHZ} MHz and memory lock ${MEMORY_LOCK_MHZ} MHz"
-  else
-    log "applied owner core lock ${CORE_LOCK_MHZ} MHz; memory remains stock"
+  if [[ -n "$POWER_LIMIT_W" ]] \
+      && ! nvidia-smi -i "$GPU_INDEX" --power-limit="$POWER_LIMIT_W" >/dev/null 2>&1; then
+    reset_clocks
+    STATE='error'
+    log "power limit apply failed; stock clocks and power limit restored and retry scheduled"
+    return
   fi
+
+  STATE='owner'
+  log "applied owner core lock ${CORE_LOCK_MHZ} MHz; memory remains stock; power limit ${POWER_LIMIT_W:-$DEFAULT_POWER_LIMIT_W} W"
 }
 
 is_gpu_container() {
@@ -182,5 +201,6 @@ fi
 
 echo "Installed and running for: $gpu_name"
 echo "Requested owner clocks: core ${CORE_LOCK_MHZ} MHz, memory ${MEMORY_LOCK_MHZ:-stock}"
+echo "Requested owner power limit: ${POWER_LIMIT_W:-$DEFAULT_POWER_LIMIT_W} W"
 systemctl status vast-qtc-clock-controller.service --no-pager --lines=8
-nvidia-smi -i 0 --query-gpu=name,clocks.current.graphics,clocks.current.memory,power.draw,temperature.gpu --format=csv,noheader
+nvidia-smi -i 0 --query-gpu=name,clocks.current.graphics,clocks.current.memory,power.limit,power.draw,temperature.gpu --format=csv,noheader
