@@ -63,7 +63,11 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-env -u LD_PRELOAD -u LD_PRELOAD_ENV SRBMiner-MULTI \
+env -i \
+  HOME=/tmp \
+  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+  TERM=xterm-256color \
+  SRBMiner-MULTI \
   --background \
   --disable-cpu \
   --algorithm quantus \
