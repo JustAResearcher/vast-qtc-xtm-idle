@@ -63,7 +63,7 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-stdbuf -oL -eL SRBMiner-MULTI \
+env -u LD_PRELOAD -u LD_PRELOAD_ENV -u LD_LIBRARY_PATH SRBMiner-MULTI \
   --disable-cpu \
   --algorithm quantus \
   --pool "$QTC_POOL" \
