@@ -3,6 +3,9 @@ set -Eeuo pipefail
 
 CONTROLLER=/usr/local/sbin/vast-qtc-clock-controller
 SERVICE=/etc/systemd/system/vast-qtc-clock-controller.service
+CONFIG=/etc/default/vast-qtc-clock-controller
+CORE_LOCK_MHZ=${CORE_LOCK_MHZ:-1750}
+MEMORY_LOCK_MHZ=${MEMORY_LOCK_MHZ:-}
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   echo "Run this installer from the physical Ubuntu host's root shell." >&2
@@ -16,24 +19,58 @@ for command_name in nvidia-smi docker systemctl grep; do
   fi
 done
 
+if [[ ! "$CORE_LOCK_MHZ" =~ ^[0-9]+$ ]]; then
+  echo "CORE_LOCK_MHZ must be a positive integer." >&2
+  exit 1
+fi
+if [[ -n "$MEMORY_LOCK_MHZ" && ! "$MEMORY_LOCK_MHZ" =~ ^[0-9]+$ ]]; then
+  echo "MEMORY_LOCK_MHZ must be empty or a positive integer." >&2
+  exit 1
+fi
+
 gpu_name=$(nvidia-smi -i 0 --query-gpu=name --format=csv,noheader | head -n 1)
 if [[ "$gpu_name" != *"RTX 2080 Ti"* ]]; then
   echo "Refusing to install: GPU 0 is '$gpu_name', not an RTX 2080 Ti." >&2
   exit 1
 fi
 
+if [[ -n "$MEMORY_LOCK_MHZ" ]]; then
+  supported_clocks=$(nvidia-smi -i 0 --query-supported-clocks=memory,graphics --format=csv,noheader 2>/dev/null) || {
+    echo "The driver could not report supported clock pairs; existing settings were not changed." >&2
+    exit 1
+  }
+  if ! awk -F, -v wanted="$MEMORY_LOCK_MHZ" '
+      {
+        memory = $1
+        gsub(/[^0-9.]/, "", memory)
+        if (memory + 0 == wanted + 0) found = 1
+      }
+      END { exit(found ? 0 : 1) }
+    ' <<<"$supported_clocks"; then
+    echo "Memory lock ${MEMORY_LOCK_MHZ} MHz is not supported by this RTX 2080 Ti; existing settings were not changed." >&2
+    exit 1
+  fi
+fi
+
 install -d -m 0755 /usr/local/sbin
+
+{
+  printf 'CORE_LOCK_MHZ=%s\n' "$CORE_LOCK_MHZ"
+  printf 'MEMORY_LOCK_MHZ=%s\n' "$MEMORY_LOCK_MHZ"
+} >"$CONFIG"
+chmod 0644 "$CONFIG"
 
 cat >"$CONTROLLER" <<'CONTROLLER_EOF'
 #!/usr/bin/env bash
 set -uo pipefail
 
 GPU_INDEX=0
-CORE_LOCK_MHZ=1750
 OWNER_IMAGE='ghcr.io/justaresearcher/vast-qtc-xtm-idle@sha256:7f656407b2e71cdd1928ba1c38da6aae4e91b3fa24c9c773597570b94848b428'
 OWNER_WORKER='mfarm-rig-881343'
 POLL_SECONDS=3
 STATE='unknown'
+
+source /etc/default/vast-qtc-clock-controller
 
 log() {
   printf '[vast-qtc-clock] %s\n' "$*"
@@ -53,13 +90,26 @@ apply_owner_clocks() {
   nvidia-smi -i "$GPU_INDEX" --reset-gpu-clocks >/dev/null 2>&1 || true
   nvidia-smi -i "$GPU_INDEX" --reset-memory-clocks >/dev/null 2>&1 || true
 
-  if nvidia-smi -i "$GPU_INDEX" --lock-gpu-clocks="$CORE_LOCK_MHZ,$CORE_LOCK_MHZ" >/dev/null 2>&1; then
-    STATE='owner'
-    log "applied owner core lock ${CORE_LOCK_MHZ} MHz; memory remains stock"
-  else
+  if ! nvidia-smi -i "$GPU_INDEX" --lock-gpu-clocks="$CORE_LOCK_MHZ,$CORE_LOCK_MHZ" >/dev/null 2>&1; then
     reset_clocks
     STATE='error'
-    log "clock apply failed; stock clocks restored and retry scheduled"
+    log "core clock apply failed; stock clocks restored and retry scheduled"
+    return
+  fi
+
+  if [[ -n "$MEMORY_LOCK_MHZ" ]] \
+      && ! nvidia-smi -i "$GPU_INDEX" --lock-memory-clocks="$MEMORY_LOCK_MHZ,$MEMORY_LOCK_MHZ" >/dev/null 2>&1; then
+    reset_clocks
+    STATE='error'
+    log "memory clock apply failed; stock clocks restored and retry scheduled"
+    return
+  fi
+
+  STATE='owner'
+  if [[ -n "$MEMORY_LOCK_MHZ" ]]; then
+    log "applied owner core lock ${CORE_LOCK_MHZ} MHz and memory lock ${MEMORY_LOCK_MHZ} MHz"
+  else
+    log "applied owner core lock ${CORE_LOCK_MHZ} MHz; memory remains stock"
   fi
 }
 
@@ -134,7 +184,8 @@ SERVICE_EOF
 
 chmod 0644 "$SERVICE"
 systemctl daemon-reload
-systemctl enable --now vast-qtc-clock-controller.service
+systemctl enable vast-qtc-clock-controller.service
+systemctl restart vast-qtc-clock-controller.service
 
 if ! systemctl is-active --quiet vast-qtc-clock-controller.service; then
   echo "Controller failed to start:" >&2
@@ -143,5 +194,6 @@ if ! systemctl is-active --quiet vast-qtc-clock-controller.service; then
 fi
 
 echo "Installed and running for: $gpu_name"
+echo "Requested owner clocks: core ${CORE_LOCK_MHZ} MHz, memory ${MEMORY_LOCK_MHZ:-stock}"
 systemctl status vast-qtc-clock-controller.service --no-pager --lines=8
 nvidia-smi -i 0 --query-gpu=name,clocks.current.graphics,clocks.current.memory,power.draw,temperature.gpu --format=csv,noheader
