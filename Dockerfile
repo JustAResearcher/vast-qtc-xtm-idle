@@ -30,6 +30,6 @@ COPY entrypoint.sh /usr/local/bin/idle-mining
 RUN chmod 0755 /usr/local/bin/idle-mining
 
 LABEL org.opencontainers.image.source="https://github.com/JustAResearcher/vast-qtc-xtm-idle"
-LABEL org.opencontainers.image.description="Vast background job for Pearl GPU and XTM CPU idle mining"
+LABEL org.opencontainers.image.description="Vast background job for Quan GPU and XTM CPU idle mining"
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/idle-mining"]
