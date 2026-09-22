@@ -26,7 +26,7 @@ RUN apt-get update \
     && chmod 0755 /usr/local/bin/xmrig \
     && rm -rf "/opt/xmrig-${XMRIG_VERSION}" /tmp/xmrig.tar.gz
 
-COPY entrypoint.sh /usr/local/bin/idle-mining
+COPY entrypoint-srb2080.sh /usr/local/bin/idle-mining
 RUN chmod 0755 /usr/local/bin/idle-mining
 
 LABEL org.opencontainers.image.source="https://github.com/JustAResearcher/vast-qtc-xtm-idle"

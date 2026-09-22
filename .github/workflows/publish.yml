@@ -40,18 +40,18 @@ jobs:
           platforms: linux/amd64
 
       - uses: docker/metadata-action@v5
-        id: meta_peak2080
+        id: meta_srb2080
         with:
           images: ghcr.io/${{ github.repository_owner }}/vast-qtc-xtm-idle
           tags: |
-            type=raw,value=peak2080
-            type=sha,prefix=peak2080-
+            type=raw,value=srb2080
+            type=sha,prefix=srb2080-
 
       - uses: docker/build-push-action@v6
         with:
           context: .
-          file: Dockerfile.peak2080
+          file: Dockerfile.srb2080
           push: true
-          tags: ${{ steps.meta_peak2080.outputs.tags }}
-          labels: ${{ steps.meta_peak2080.outputs.labels }}
+          tags: ${{ steps.meta_srb2080.outputs.tags }}
+          labels: ${{ steps.meta_srb2080.outputs.labels }}
           platforms: linux/amd64
